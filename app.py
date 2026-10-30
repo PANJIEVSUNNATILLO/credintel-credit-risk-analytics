@@ -1439,30 +1439,123 @@ elif page == "Research & Reports":
             # BUILD PDF
             # -------------------------------------------------
 
-            document.build(
-                story,
-                onFirstPage=draw_page,
-                onLaterPages=draw_page
-            )
+          
+            # -------------------------------------------------
+            # AI-POWERED EXECUTIVE COMMENTARY
+            # -------------------------------------------------
 
-            buffer.seek(0)
+            story.append(PageBreak())
 
-            st.success("Your executive report has been generated.")
+            story.append(Paragraph(
+                "04 | AI Executive Commentary",
+                styles["SectionCustom"]
+            ))
 
-            st.download_button(
-                "Download CredIntel Executive Report (PDF)",
-                buffer.getvalue(),
-                "CredIntel_Executive_Credit_Risk_Report.pdf",
-                "application/pdf",
-                use_container_width=True
-            )
+            story.append(Paragraph(
+                "AI-generated portfolio interpretation",
+                styles["SubsectionCustom"]
+            ))
 
-        except Exception as e:
-            st.error(f"Could not generate PDF: {e}")
-            st.info(
-                "If the error mentions Kaleido or Chrome, the chart-image "
-                "export dependency may need additional setup."
-            )
+            try:
+                import os
+                from google import genai
+
+                api_key = st.secrets.get("GEMINI_API_KEY", None)
+
+                if api_key and total > 0:
+
+                    client = genai.Client(api_key=api_key)
+
+                    ai_prompt = f"""
+You are a senior banking credit risk analyst.
+
+Prepare a professional executive commentary for a credit risk report.
+
+Use only the following portfolio statistics:
+
+Total customers: {total}
+Recorded defaults: {defaults}
+Observed default rate: {rate:.2f}%
+Average credit limit: {avg_limit:.2f}
+Median credit limit: {median_limit:.2f}
+Average customer age: {avg_age:.1f}
+
+Write five concise sections:
+
+1. Executive assessment
+2. Key portfolio observations
+3. Credit risk considerations
+4. Management recommendations
+5. Limitations and responsible use
+
+Rules:
+- Use professional banking language.
+- Do not invent statistics.
+- Do not claim correlation proves causation.
+- Do not make individual lending decisions.
+- Clearly state that the dataset is historical.
+- Recommendations must be suitable for analytical review.
+- Keep the complete response under 450 words.
+"""
+
+                    response = client.models.generate_content(
+                        model="gemini-3.5-flash",
+                        contents=ai_prompt
+                    )
+
+                    commentary = response.text or (
+                        "AI commentary could not be generated."
+                    )
+
+                    # Convert plain text into PDF paragraphs
+                    for paragraph in commentary.split("\n"):
+
+                        paragraph = paragraph.strip()
+
+                        if not paragraph:
+                            continue
+
+                        safe_paragraph = (
+                            paragraph
+                            .replace("&", "&amp;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;")
+                        )
+
+                        if paragraph[:2].isdigit() and "." in paragraph[:4]:
+                            story.append(Paragraph(
+                                safe_paragraph,
+                                styles["SubsectionCustom"]
+                            ))
+                        else:
+                            story.append(Paragraph(
+                                safe_paragraph,
+                                styles["BodyCustom"]
+                            ))
+
+                else:
+
+                    story.append(Paragraph(
+                        "AI commentary is unavailable. "
+                        "Check that GEMINI_API_KEY is configured "
+                        "in Streamlit Secrets and that the selected "
+                        "portfolio contains customer records.",
+                        styles["BodyCustom"]
+                    ))
+
+            except Exception as ai_error:
+
+                story.append(Paragraph(
+                    "AI commentary could not be generated during this run. "
+                    "The remaining report is still available.",
+                    styles["BodyCustom"]
+                ))
+
+                story.append(Paragraph(
+                    str(ai_error).replace("&", "&amp;").replace("<", "&lt;"),
+                    styles["SmallCustom"]
+                ))
+
 
     st.divider()
 
