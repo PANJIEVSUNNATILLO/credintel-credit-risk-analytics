@@ -469,131 +469,102 @@ if page == "Executive Overview":
 # =========================================================
 # CREDIT RISK ANALYTICS
 # =========================================================
-
 elif page == "Credit Risk Analytics":
 
     st.subheader("Credit Risk Analytics")
+    st.caption("Explore repayment behavior, customer groups and portfolio patterns.")
 
-    if total == 0:
+    tab1, tab2, tab3 = st.tabs([
+        "Repayment Behavior",
+        "Customer Segments",
+        "Correlation Analysis"
+    ])
 
-        st.warning("No data available for the selected filters.")
+    with tab1:
+        st.markdown("#### Default rate by repayment status")
 
-    else:
+        repayment = (
+            filtered.groupby("PAY_0")
+            .agg(
+                Customers=(TARGET, "count"),
+                Defaults=(TARGET, "sum"),
+                Default_Rate=(TARGET, "mean")
+            )
+            .reset_index()
+        )
+        repayment["Default_Rate"] *= 100
 
-        st.markdown("### Credit Limit Segmentation")
+        fig = px.bar(
+            repayment,
+            x="PAY_0",
+            y="Default_Rate",
+            color="Default_Rate",
+            color_continuous_scale="Blues",
+            hover_data=["Customers", "Defaults"]
+        )
+        make_chart(fig)
 
-        bins = [
-            0,
-            50000,
-            100000,
-            200000,
-            500000,
-            float("inf")
-        ]
+        st.dataframe(repayment, use_container_width=True, hide_index=True)
 
+    with tab2:
+        st.markdown("#### Default rate by credit limit segment")
+
+        bins = [0, 50000, 100000, 200000, 500000, float("inf")]
         labels = [
             "Under 50K",
-            "50K-99K",
-            "100K-199K",
-            "200K-499K",
+            "50K–99K",
+            "100K–199K",
+            "200K–499K",
             "500K and above"
         ]
 
-        segment_df = filtered.copy()
-
-        segment_df["Credit Segment"] = pd.cut(
-            segment_df["LIMIT_BAL"],
+        segment_data = filtered.copy()
+        segment_data["Credit Segment"] = pd.cut(
+            segment_data["LIMIT_BAL"],
             bins=bins,
             labels=labels,
             right=False
         )
 
-        segment_summary = (
-            segment_df.groupby(
-                "Credit Segment",
-                observed=False
-            )
+        segment = (
+            segment_data.groupby("Credit Segment", observed=False)
             .agg(
                 Customers=(TARGET, "count"),
-                Defaults=(TARGET, "sum")
+                Defaults=(TARGET, "sum"),
+                Default_Rate=(TARGET, "mean")
             )
             .reset_index()
         )
-
-        segment_summary["Default Rate"] = (
-            segment_summary["Defaults"] /
-            segment_summary["Customers"].replace(0, 1) * 100
-        )
+        segment["Default_Rate"] *= 100
 
         fig = px.bar(
-            segment_summary,
+            segment,
             x="Credit Segment",
-            y="Customers",
-            color="Default Rate",
-            title="Customers by Credit Limit Segment",
-            color_continuous_scale="Blues",
-            text="Customers"
+            y="Default_Rate",
+            color="Default_Rate",
+            color_continuous_scale="Blues"
         )
+        make_chart(fig)
 
-        fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0B1730",
-            plot_bgcolor="#0B1730",
-            font_color="white"
+        st.dataframe(segment, use_container_width=True, hide_index=True)
+
+    with tab3:
+        st.markdown("#### Selected variable correlations")
+
+        numeric = filtered.select_dtypes(include="number")
+        correlation = numeric.corr()
+
+        fig = px.imshow(
+            correlation,
+            text_auto=".2f",
+            color_continuous_scale="RdBu_r",
+            aspect="auto"
         )
+        make_chart(fig, height=600)
 
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.markdown("### Segment Performance")
-
-        st.dataframe(
-            segment_summary,
-            use_container_width=True,
-            hide_index=True
+        st.caption(
+            "Correlation indicates statistical association, not causation."
         )
-
-        st.divider()
-
-        st.markdown("### Repayment Status Analysis")
-
-        repayment_summary = (
-            filtered.groupby("PAY_0")
-            .agg(
-                Customers=(TARGET, "count"),
-                Defaults=(TARGET, "sum")
-            )
-            .reset_index()
-        )
-
-        repayment_summary["Default Rate"] = (
-            repayment_summary["Defaults"] /
-            repayment_summary["Customers"].replace(0, 1) * 100
-        )
-
-        fig = px.bar(
-            repayment_summary,
-            x="PAY_0",
-            y="Default Rate",
-            title="Observed Default Rate by Repayment Status",
-            color_discrete_sequence=["#2474D2"]
-        )
-
-        fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0B1730",
-            plot_bgcolor="#0B1730",
-            font_color="white"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.dataframe(
-            repayment_summary,
-            use_container_width=True,
-            hide_index=True
-        )
-
-
 # =========================================================
 # AI INTELLIGENCE
 # =========================================================
