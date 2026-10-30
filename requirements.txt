@@ -4,3 +4,4 @@ openpyxl
 xlrd
 plotly
 google-genai
+reportlab
