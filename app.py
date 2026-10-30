@@ -616,7 +616,10 @@ ORDER BY default_rate DESC"""
 elif page == "Research & Reports":
 
     st.subheader("Research & Reports")
-    st.caption("Export portfolio data and generate a management summary.")
+    st.caption(
+        "Generate a professional, multi-page CredIntel management report "
+        "using the currently selected customer data."
+    )
 
     st.markdown("#### Customer data export")
 
@@ -632,92 +635,842 @@ elif page == "Research & Reports":
 
     st.markdown("#### Executive PDF report")
 
-    if st.button("Generate PDF Report", use_container_width=True):
+    st.info(
+        "The report will reflect the filters currently selected in the sidebar."
+    )
+
+    if st.button("Generate Executive PDF Report", use_container_width=True):
 
         try:
+            from io import BytesIO
+            from datetime import datetime
+
+            import pandas as pd
+            import plotly.express as px
+
+            from reportlab.lib import colors
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT
             from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import mm
             from reportlab.platypus import (
                 SimpleDocTemplate,
                 Paragraph,
                 Spacer,
                 Table,
-                TableStyle
+                TableStyle,
+                Image,
+                PageBreak,
+                KeepTogether
             )
-            from reportlab.lib import colors
-            from reportlab.lib.styles import getSampleStyleSheet
 
-            buffer = BytesIO()
-            document = SimpleDocTemplate(buffer, pagesize=A4)
+            # -------------------------------------------------
+            # BRAND COLORS
+            # -------------------------------------------------
+
+            NAVY = colors.HexColor("#0B1730")
+            BLUE = colors.HexColor("#2474D2")
+            LIGHT_BLUE = colors.HexColor("#EAF2FC")
+            PALE = colors.HexColor("#F4F7FB")
+            GREY = colors.HexColor("#667085")
+            DARK = colors.HexColor("#182B49")
+            WHITE = colors.white
+
+            # -------------------------------------------------
+            # DATA SUMMARY
+            # -------------------------------------------------
+
+            report_df = filtered.copy()
+
+            total = len(report_df)
+
+            defaults = (
+                int(report_df[TARGET].sum())
+                if total > 0 else 0
+            )
+
+            non_defaults = total - defaults
+
+            rate = (
+                calculate_default_rate(report_df)
+                if total > 0 else 0
+            )
+
+            avg_limit = (
+                report_df["LIMIT_BAL"].mean()
+                if total > 0 else 0
+            )
+
+            avg_age = (
+                report_df["AGE"].mean()
+                if total > 0 else 0
+            )
+
+            median_limit = (
+                report_df["LIMIT_BAL"].median()
+                if total > 0 else 0
+            )
+
+            report_date = datetime.now().strftime("%d %B %Y")
+
+            # -------------------------------------------------
+            # REPORT STYLES
+            # -------------------------------------------------
+
             styles = getSampleStyleSheet()
 
-            total = len(filtered)
-            defaults = int(filtered[TARGET].sum()) if total else 0
-            rate = calculate_default_rate(filtered)
+            styles.add(ParagraphStyle(
+                name="CoverTitle",
+                parent=styles["Title"],
+                fontName="Helvetica-Bold",
+                fontSize=27,
+                leading=34,
+                textColor=NAVY,
+                alignment=TA_LEFT,
+                spaceAfter=12
+            ))
 
-            story = [
-                Paragraph("CredIntel Credit Risk Report", styles["Title"]),
-                Spacer(1, 20),
-                Paragraph("Executive Portfolio Summary", styles["Heading2"]),
-                Spacer(1, 10)
+            styles.add(ParagraphStyle(
+                name="SubtitleCustom",
+                parent=styles["Normal"],
+                fontName="Helvetica",
+                fontSize=12,
+                leading=18,
+                textColor=GREY,
+                spaceAfter=10
+            ))
+
+            styles.add(ParagraphStyle(
+                name="SectionCustom",
+                parent=styles["Heading2"],
+                fontName="Helvetica-Bold",
+                fontSize=16,
+                leading=21,
+                textColor=NAVY,
+                spaceBefore=10,
+                spaceAfter=10
+            ))
+
+            styles.add(ParagraphStyle(
+                name="SubsectionCustom",
+                parent=styles["Heading3"],
+                fontName="Helvetica-Bold",
+                fontSize=11,
+                leading=15,
+                textColor=BLUE,
+                spaceBefore=8,
+                spaceAfter=6
+            ))
+
+            styles.add(ParagraphStyle(
+                name="BodyCustom",
+                parent=styles["BodyText"],
+                fontName="Helvetica",
+                fontSize=9,
+                leading=14,
+                textColor=DARK,
+                spaceAfter=8
+            ))
+
+            styles.add(ParagraphStyle(
+                name="SmallCustom",
+                parent=styles["Normal"],
+                fontName="Helvetica",
+                fontSize=8,
+                leading=11,
+                textColor=GREY
+            ))
+
+            # -------------------------------------------------
+            # PDF HEADER AND FOOTER
+            # -------------------------------------------------
+
+            def draw_page(canvas, document):
+
+                canvas.saveState()
+
+                page_width, page_height = A4
+
+                # Top navy brand strip
+                canvas.setFillColor(NAVY)
+                canvas.rect(
+                    0,
+                    page_height - 13 * mm,
+                    page_width,
+                    13 * mm,
+                    fill=1,
+                    stroke=0
+                )
+
+                canvas.setFillColor(WHITE)
+                canvas.setFont("Helvetica-Bold", 9)
+                canvas.drawString(
+                    18 * mm,
+                    page_height - 8.5 * mm,
+                    "CREDINTEL"
+                )
+
+                canvas.setFont("Helvetica", 8)
+                canvas.drawRightString(
+                    page_width - 18 * mm,
+                    page_height - 8.5 * mm,
+                    "CREDIT RISK INTELLIGENCE"
+                )
+
+                # Footer line
+                canvas.setStrokeColor(colors.HexColor("#D9E1EC"))
+                canvas.line(
+                    18 * mm,
+                    15 * mm,
+                    page_width - 18 * mm,
+                    15 * mm
+                )
+
+                canvas.setFillColor(GREY)
+                canvas.setFont("Helvetica", 8)
+                canvas.drawString(
+                    18 * mm,
+                    9 * mm,
+                    "Confidentiality: Educational research report"
+                )
+
+                canvas.drawRightString(
+                    page_width - 18 * mm,
+                    9 * mm,
+                    f"Page {document.page}"
+                )
+
+                canvas.restoreState()
+
+            # -------------------------------------------------
+            # DOCUMENT SETUP
+            # -------------------------------------------------
+
+            buffer = BytesIO()
+
+            document = SimpleDocTemplate(
+                buffer,
+                pagesize=A4,
+                rightMargin=18 * mm,
+                leftMargin=18 * mm,
+                topMargin=22 * mm,
+                bottomMargin=23 * mm,
+                title="CredIntel Credit Risk Intelligence Report",
+                author="CredIntel Analytics"
+            )
+
+            story = []
+
+            # -------------------------------------------------
+            # PAGE 1: COVER AND EXECUTIVE SUMMARY
+            # -------------------------------------------------
+
+            story.append(Spacer(1, 24 * mm))
+
+            story.append(Paragraph(
+                "CREDINTEL",
+                ParagraphStyle(
+                    "BrandLarge",
+                    parent=styles["Normal"],
+                    fontName="Helvetica-Bold",
+                    fontSize=13,
+                    textColor=BLUE,
+                    spaceAfter=14
+                )
+            ))
+
+            story.append(Paragraph(
+                "Credit Risk<br/>Intelligence Report",
+                styles["CoverTitle"]
+            ))
+
+            story.append(Paragraph(
+                "Turning Financial Data Into Intelligence",
+                styles["SubtitleCustom"]
+            ))
+
+            story.append(Spacer(1, 8 * mm))
+
+            cover_info = [
+                ["REPORT TYPE", "Executive Portfolio Analysis"],
+                ["REPORT DATE", report_date],
+                ["DATASET", "Default of Credit Card Clients"],
+                ["RECORDS ANALYZED", f"{total:,}"]
             ]
 
-            report_data = [
-                ["Metric", "Value"],
-                ["Customers", f"{total:,}"],
-                ["Defaulted customers", f"{defaults:,}"],
-                ["Observed default rate", f"{rate:.2f}%"],
+            cover_table = Table(
+                cover_info,
+                colWidths=[45 * mm, 105 * mm]
+            )
+
+            cover_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (0, -1), NAVY),
+                ("TEXTCOLOR", (0, 0), (0, -1), WHITE),
+                ("TEXTCOLOR", (1, 0), (1, -1), DARK),
+                ("BACKGROUND", (1, 0), (1, -1), PALE),
+                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("GRID", (0, 0), (-1, -1), 0.5, WHITE),
+                ("PADDING", (0, 0), (-1, -1), 11),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE")
+            ]))
+
+            story.append(cover_table)
+            story.append(Spacer(1, 13 * mm))
+
+            story.append(Paragraph(
+                "Executive Summary",
+                styles["SectionCustom"]
+            ))
+
+            if total > 0:
+                summary_text = (
+                    f"The selected portfolio contains <b>{total:,}</b> customers. "
+                    f"Within this dataset, <b>{defaults:,}</b> customers are recorded "
+                    f"as having defaulted, representing an observed default rate of "
+                    f"<b>{rate:.2f}%</b>. The average credit limit is "
+                    f"<b>{avg_limit:,.0f}</b>, while the average customer age is "
+                    f"<b>{avg_age:.1f} years</b>."
+                )
+            else:
+                summary_text = (
+                    "No customer records match the current filters. "
+                    "Adjust the sidebar filters to generate a populated report."
+                )
+
+            story.append(Paragraph(
+                summary_text,
+                styles["BodyCustom"]
+            ))
+
+            story.append(Paragraph(
+                "Portfolio KPI Dashboard",
+                styles["SubsectionCustom"]
+            ))
+
+            kpi_data = [
+                ["TOTAL CUSTOMERS", "DEFAULTED", "OBSERVED DEFAULT RATE"],
                 [
-                    "Average credit limit",
-                    format_money(filtered["LIMIT_BAL"].mean() if total else 0)
-                ],
-                [
-                    "Average age",
-                    f"{filtered['AGE'].mean():.1f}" if total else "N/A"
+                    f"{total:,}",
+                    f"{defaults:,}",
+                    f"{rate:.2f}%"
                 ]
             ]
 
-            table = Table(report_data, colWidths=[250, 180])
-            table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#17365D")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                ("PADDING", (0, 0), (-1, -1), 9),
-                ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke)
+            kpi_table = Table(
+                kpi_data,
+                colWidths=[50 * mm, 50 * mm, 50 * mm],
+                rowHeights=[10 * mm, 18 * mm]
+            )
+
+            kpi_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+                ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+                ("BACKGROUND", (0, 1), (-1, 1), LIGHT_BLUE),
+                ("TEXTCOLOR", (0, 1), (-1, 1), NAVY),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 7),
+                ("FONTSIZE", (0, 1), (-1, 1), 17),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("BOX", (0, 0), (-1, -1), 0.7, WHITE),
+                ("PADDING", (0, 0), (-1, -1), 7)
             ]))
 
-            story.extend([
-                table,
-                Spacer(1, 20),
-                Paragraph("Responsible Use and Limitations", styles["Heading2"]),
-                Paragraph(
-                    "This report analyzes historical credit card data from Taiwan. "
-                    "Observed statistical relationships do not establish causation. "
-                    "This analysis is for educational and research purposes and "
-                    "must not be used as the sole basis for individual lending decisions.",
-                    styles["BodyText"]
-                )
-            ])
+            story.append(kpi_table)
 
-            document.build(story)
+            story.append(Spacer(1, 8 * mm))
+
+            story.append(Paragraph(
+                "Additional portfolio indicators",
+                styles["SubsectionCustom"]
+            ))
+
+            additional_data = [
+                ["Indicator", "Portfolio value"],
+                ["Average credit limit", f"{avg_limit:,.2f}"],
+                ["Median credit limit", f"{median_limit:,.2f}"],
+                [
+                    "Average customer age",
+                    f"{avg_age:.1f} years" if total else "N/A"
+                ],
+                ["Customers without recorded default", f"{non_defaults:,}"]
+            ]
+
+            additional_table = Table(
+                additional_data,
+                colWidths=[90 * mm, 60 * mm]
+            )
+
+            additional_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), LIGHT_BLUE),
+                ("TEXTCOLOR", (0, 0), (-1, 0), NAVY),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D9E1EC")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, PALE]),
+                ("PADDING", (0, 0), (-1, -1), 8)
+            ]))
+
+            story.append(additional_table)
+
+            # -------------------------------------------------
+            # PAGE 2: PORTFOLIO RISK ANALYSIS
+            # -------------------------------------------------
+
+            story.append(PageBreak())
+
+            story.append(Paragraph(
+                "01 | Portfolio Risk Analysis",
+                styles["SectionCustom"]
+            ))
+
+            story.append(Paragraph(
+                "Default distribution",
+                styles["SubsectionCustom"]
+            ))
+
+            if total > 0:
+
+                default_chart = pd.DataFrame({
+                    "Status": ["No recorded default", "Recorded default"],
+                    "Customers": [non_defaults, defaults]
+                })
+
+                fig1 = px.pie(
+                    default_chart,
+                    names="Status",
+                    values="Customers",
+                    hole=0.62,
+                    title="Customer Default Distribution",
+                    color_discrete_sequence=["#2474D2", "#E58A45"]
+                )
+
+                fig1.update_layout(
+                    template="plotly_white",
+                    font=dict(family="Arial", size=12),
+                    title_x=0.05,
+                    margin=dict(l=20, r=20, t=55, b=20),
+                    height=350
+                )
+
+                chart_image = BytesIO(
+                    fig1.to_image(
+                        format="png",
+                        width=1100,
+                        height=650,
+                        scale=2
+                    )
+                )
+
+                story.append(Image(
+                    chart_image,
+                    width=155 * mm,
+                    height=88 * mm
+                ))
+
+                story.append(Spacer(1, 5 * mm))
+
+                story.append(Paragraph(
+                    f"Of the {total:,} selected customers, "
+                    f"{defaults:,} are recorded as having defaulted. "
+                    f"This represents {rate:.2f}% of the selected portfolio. "
+                    "The figures describe this historical dataset and should "
+                    "not be interpreted as a forecast of future defaults.",
+                    styles["BodyCustom"]
+                ))
+
+            else:
+                story.append(Paragraph(
+                    "No data is available for the selected filters.",
+                    styles["BodyCustom"]
+                ))
+
+            # -------------------------------------------------
+            # REPAYMENT STATUS ANALYSIS
+            # -------------------------------------------------
+
+            story.append(Paragraph(
+                "Repayment Status Analysis",
+                styles["SubsectionCustom"]
+            ))
+
+            repayment_column = (
+                "PAY_0" if "PAY_0" in report_df.columns else None
+            )
+
+            if total > 0 and repayment_column:
+
+                repayment = (
+                    report_df
+                    .groupby(repayment_column)
+                    .agg(
+                        Customers=(TARGET, "count"),
+                        Defaults=(TARGET, "sum")
+                    )
+                    .reset_index()
+                    .sort_values(repayment_column)
+                )
+
+                repayment["Default rate"] = (
+                    100 * repayment["Defaults"] /
+                    repayment["Customers"].replace(0, 1)
+                )
+
+                fig2 = px.bar(
+                    repayment,
+                    x=repayment_column,
+                    y="Default rate",
+                    title="Observed Default Rate by Repayment Status",
+                    labels={
+                        repayment_column: "Repayment status",
+                        "Default rate": "Default rate (%)"
+                    },
+                    text_auto=".1f",
+                    color_discrete_sequence=["#2474D2"]
+                )
+
+                fig2.update_layout(
+                    template="plotly_white",
+                    title_x=0.05,
+                    margin=dict(l=20, r=20, t=55, b=30),
+                    height=330
+                )
+
+                repayment_image = BytesIO(
+                    fig2.to_image(
+                        format="png",
+                        width=1100,
+                        height=600,
+                        scale=2
+                    )
+                )
+
+                story.append(Image(
+                    repayment_image,
+                    width=155 * mm,
+                    height=84 * mm
+                ))
+
+                story.append(Paragraph(
+                    "Repayment status categories are historical payment "
+                    "indicators. Differences in observed default rates show "
+                    "associations in this dataset, not proof of causation.",
+                    styles["BodyCustom"]
+                ))
+
+            # -------------------------------------------------
+            # PAGE 3: CREDIT LIMIT ANALYSIS
+            # -------------------------------------------------
+
+            story.append(PageBreak())
+
+            story.append(Paragraph(
+                "02 | Customer Segment Analysis",
+                styles["SectionCustom"]
+            ))
+
+            story.append(Paragraph(
+                "Credit Limit Distribution",
+                styles["SubsectionCustom"]
+            ))
+
+            if total > 0:
+
+                bins = [0, 50000, 100000, 200000, 500000, float("inf")]
+
+                labels = [
+                    "Under 50K",
+                    "50K-99K",
+                    "100K-199K",
+                    "200K-499K",
+                    "500K and above"
+                ]
+
+                segment_df = report_df.copy()
+
+                segment_df["Credit Segment"] = pd.cut(
+                    segment_df["LIMIT_BAL"],
+                    bins=bins,
+                    labels=labels,
+                    right=False
+                )
+
+                segment_summary = (
+                    segment_df
+                    .groupby("Credit Segment", observed=False)
+                    .agg(
+                        Customers=(TARGET, "count"),
+                        Defaults=(TARGET, "sum")
+                    )
+                    .reset_index()
+                )
+
+                segment_summary["Default rate"] = (
+                    100 * segment_summary["Defaults"] /
+                    segment_summary["Customers"].replace(0, 1)
+                )
+
+                fig3 = px.bar(
+                    segment_summary,
+                    x="Credit Segment",
+                    y="Customers",
+                    title="Customers by Credit Limit Segment",
+                    text="Customers",
+                    color_discrete_sequence=["#2474D2"]
+                )
+
+                fig3.update_layout(
+                    template="plotly_white",
+                    title_x=0.05,
+                    margin=dict(l=20, r=20, t=55, b=30),
+                    height=350
+                )
+
+                segment_image = BytesIO(
+                    fig3.to_image(
+                        format="png",
+                        width=1100,
+                        height=650,
+                        scale=2
+                    )
+                )
+
+                story.append(Image(
+                    segment_image,
+                    width=155 * mm,
+                    height=92 * mm
+                ))
+
+                story.append(Paragraph(
+                    "Credit limit segments provide a descriptive view of "
+                    "portfolio composition. Customer counts and observed "
+                    "default rates should be considered together when "
+                    "reviewing segment-level patterns.",
+                    styles["BodyCustom"]
+                ))
+
+                story.append(Paragraph(
+                    "Credit Segment Summary",
+                    styles["SubsectionCustom"]
+                ))
+
+                segment_table_data = [
+                    ["Credit segment", "Customers", "Defaults", "Default rate"]
+                ]
+
+                for _, row in segment_summary.iterrows():
+
+                    segment_table_data.append([
+                        str(row["Credit Segment"]),
+                        f"{int(row['Customers']):,}",
+                        f"{int(row['Defaults']):,}",
+                        (
+                            f"{row['Default rate']:.2f}%"
+                            if row["Customers"] > 0 else "N/A"
+                        )
+                    ])
+
+                segment_table = Table(
+                    segment_table_data,
+                    colWidths=[55 * mm, 30 * mm, 30 * mm, 35 * mm]
+                )
+
+                segment_table.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D9E1EC")),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, PALE]),
+                    ("PADDING", (0, 0), (-1, -1), 7),
+                    ("ALIGN", (1, 1), (-1, -1), "RIGHT")
+                ]))
+
+                story.append(segment_table)
+
+            else:
+                story.append(Paragraph(
+                    "No customer data is available for segment analysis.",
+                    styles["BodyCustom"]
+                ))
+
+            # -------------------------------------------------
+            # PAGE 4: METHODOLOGY AND RESPONSIBLE USE
+            # -------------------------------------------------
+
+            story.append(PageBreak())
+
+            story.append(Paragraph(
+                "03 | Methodology & Responsible Use",
+                styles["SectionCustom"]
+            ))
+
+            story.append(Paragraph(
+                "Dataset Overview",
+                styles["SubsectionCustom"]
+            ))
+
+            story.append(Paragraph(
+                "This project uses the Default of Credit Card Clients "
+                "dataset from the UCI Machine Learning Repository. "
+                "The original dataset contains 30,000 historical customer "
+                "records from Taiwan. The target variable represents "
+                "default payment in the following month.",
+                styles["BodyCustom"]
+            ))
+
+            story.append(Paragraph(
+                "Analytical Methodology",
+                styles["SubsectionCustom"]
+            ))
+
+            methodology_items = [
+                "Data inspection and validation of customer records.",
+                "SQL aggregation for portfolio-level performance metrics.",
+                "Calculation of observed default rates.",
+                "Segmentation by credit limit and repayment status.",
+                "Interactive visual analysis and executive reporting."
+            ]
+
+            for item in methodology_items:
+                story.append(Paragraph(
+                    "• " + item,
+                    styles["BodyCustom"]
+                ))
+
+            story.append(Paragraph(
+                "Key Definitions",
+                styles["SubsectionCustom"]
+            ))
+
+            definitions = [
+                ["Metric", "Definition"],
+                [
+                    "Observed default rate",
+                    "Recorded defaults divided by selected customer count."
+                ],
+                [
+                    "Average credit limit",
+                    "Mean credit limit among selected customer records."
+                ],
+                [
+                    "Repayment status",
+                    "Historical repayment status recorded in the dataset."
+                ]
+            ]
+
+            definition_table = Table(
+                definitions,
+                colWidths=[48 * mm, 102 * mm]
+            )
+
+            definition_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+                ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D9E1EC")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, PALE]),
+                ("PADDING", (0, 0), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "TOP")
+            ]))
+
+            story.append(definition_table)
+
+            story.append(Spacer(1, 8 * mm))
+
+            story.append(Paragraph(
+                "Responsible Use and Limitations",
+                styles["SubsectionCustom"]
+            ))
+
+            limitations = (
+                "This dataset is historical and relates to credit card "
+                "clients in Taiwan. It may not represent current customers, "
+                "other countries, or present-day lending environments. "
+                "The results are descriptive and do not establish causal "
+                "relationships. The dataset may contain historical biases "
+                "and limitations. This project is intended for educational "
+                "and analytical research purposes only. It must not be used "
+                "as the sole basis for real-world individual lending, "
+                "credit approval, pricing, or adverse decisions. Any "
+                "real-world application requires appropriate validation, "
+                "fairness testing, privacy safeguards, governance, and "
+                "human oversight."
+            )
+
+            story.append(Paragraph(
+                limitations,
+                styles["BodyCustom"]
+            ))
+
+            story.append(Paragraph(
+                "Data Source and Attribution",
+                styles["SubsectionCustom"]
+            ))
+
+            story.append(Paragraph(
+                "UCI Machine Learning Repository: Default of Credit Card "
+                "Clients. Dataset ID: 350. "
+                "https://archive.ics.uci.edu/dataset/350/default",
+                styles["SmallCustom"]
+            ))
+
+            story.append(Spacer(1, 12 * mm))
+
+            story.append(Paragraph(
+                "CREDINTEL | TURN FINANCIAL DATA INTO INTELLIGENCE",
+                ParagraphStyle(
+                    "ClosingBrand",
+                    parent=styles["Normal"],
+                    fontName="Helvetica-Bold",
+                    fontSize=10,
+                    textColor=BLUE,
+                    alignment=TA_CENTER,
+                    spaceBefore=10
+                )
+            ))
+
+            # -------------------------------------------------
+            # BUILD PDF
+            # -------------------------------------------------
+
+            document.build(
+                story,
+                onFirstPage=draw_page,
+                onLaterPages=draw_page
+            )
+
             buffer.seek(0)
 
+            st.success("Your executive report has been generated.")
+
             st.download_button(
-                "Download PDF Report",
+                "Download CredIntel Executive Report (PDF)",
                 buffer.getvalue(),
-                "credintel_executive_report.pdf",
+                "CredIntel_Executive_Credit_Risk_Report.pdf",
                 "application/pdf",
                 use_container_width=True
             )
 
         except Exception as e:
             st.error(f"Could not generate PDF: {e}")
+            st.info(
+                "If the error mentions Kaleido or Chrome, the chart-image "
+                "export dependency may need additional setup."
+            )
 
     st.divider()
+
     st.markdown("#### Dataset information")
-    st.write("Source: UCI Machine Learning Repository")
-    st.write("Dataset: Default of Credit Card Clients")
-    st.write("Records: 30,000 historical customers")
-    st.write("Target: Default payment next month")
+    st.write("**Source:** UCI Machine Learning Repository")
+    st.write("**Dataset:** Default of Credit Card Clients")
+    st.write("**Original records:** 30,000 historical customers")
+    st.write("**Target:** Default payment next month")
 
 # --------------------------------------------------
 # FOOTER
