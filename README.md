@@ -1,4 +1,9 @@
 CredIntel — Credit Risk Analytics with SQL & AI
+🚀 Live Demo
+Try CredIntel: Open the live dashboard⁠￼
+Explore historical credit-risk metrics, interactive charts, and SQL-based analysis.
+📌 Project Overview
+CredIntel is a credit-risk analytics prototype that combines Python, SQL, interactive visualizations, and AI-powered explanations to turn historical financial data into business insights.
 
 Turn Financial Data Into Intelligence.
 
