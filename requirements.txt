@@ -2,7 +2,7 @@ streamlit
 pandas
 openpyxl
 xlrd
-plotly
+plotly==5.24.1
 google-genai
 reportlab
-kaleido
+kaleido0.2.1
