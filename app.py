@@ -11,6 +11,22 @@ from xml.sax.saxutils import escape
 # =========================================================
 # PAGE CONFIGURATION
 # =========================================================
+def make_chart(fig, height=400):
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#0B1730",
+        plot_bgcolor="#0B1730",
+        font=dict(color="white"),
+        height=height,
+        margin=dict(l=20, r=20, t=50, b=20)
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={"displayModeBar": True}
+    )
+
 
 st.set_page_config(
     page_title="CredIntel | Credit Risk Intelligence",
