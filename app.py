@@ -866,7 +866,19 @@ ORDER BY default_rate DESC;"""
         if st.button("▶ Run SQL query"):
 
             cleaned = query.strip().rstrip(";").strip()
+            first_word = cleaned.split(maxsplit=1)[0].upper() if cleaned else ""
 
+            if first_word != "SELECT":
+                st.error("Only SELECT queries are permitted.")
+            elif ";" in cleaned:
+                st.error("Multiple SQL statements are not permitted.")
+            else:
+                try:
+                    result = pd.read_sql_query(cleaned, conn)
+                    st.success("Query executed successfully!")
+                    st.dataframe(result, use_container_width=True)
+                except Exception as e:
+                    st.error(f"SQL error: {e}")
             if not cleaned.lower().startswith("select "):
                 st.error("Only SELECT queries are permitted.")
 
