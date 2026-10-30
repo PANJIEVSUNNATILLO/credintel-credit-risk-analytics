@@ -5,3 +5,4 @@ xlrd
 plotly
 google-genai
 reportlab
+kaleido
