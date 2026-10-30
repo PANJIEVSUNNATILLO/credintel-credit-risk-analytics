@@ -4,844 +4,567 @@ import pandas as pd
 import sqlite3
 import plotly.express as px
 import plotly.graph_objects as go
-from google import genai
 from io import BytesIO
-from datetime import datetime
 
-# ==================================================
-# 1. PAGE CONFIGURATION
-# ==================================================
+# --------------------------------------------------
+# PAGE CONFIGURATION
+# --------------------------------------------------
 
 st.set_page_config(
-    page_title="CredIntel 2.0 | Risk Intelligence",
-    page_icon="🛡️",
+    page_title="CredIntel | Credit Risk Intelligence",
+    page_icon="🏦",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ==================================================
-# 2. PREMIUM DARK DESIGN
-# ==================================================
+# --------------------------------------------------
+# CORPORATE NAVY DESIGN
+# --------------------------------------------------
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-
-    .stApp {
-        background: #080F1D;
-        color: #E2E8F0;
-    }
-
-    [data-testid="stSidebar"] {
-        background: #101B2D;
-        border-right: 1px solid #26364D;
-    }
-
-    h1, h2, h3 {
-        color: #F8FAFC !important;
-        font-weight: 700 !important;
-    }
-
-    p, label, .stMarkdown {
-        color: #CBD5E1;
-    }
-
-    [data-testid="stMetric"] {
-        background: linear-gradient(145deg, #17263B, #111D30);
-        border: 1px solid #293B54;
-        padding: 19px;
-        border-radius: 14px;
-        box-shadow: 0 5px 18px rgba(0,0,0,0.15);
-    }
-
-    [data-testid="stMetricValue"] {
-        color: #5EEAD4 !important;
-        font-weight: 800;
-    }
-
-    [data-testid="stMetricLabel"] {
-        color: #A8B7C9 !important;
-    }
-
-    .stButton > button {
-        background: linear-gradient(90deg, #0D9488, #0F766E);
-        color: white;
-        border: none;
-        border-radius: 9px;
-        font-weight: 600;
-        min-height: 42px;
-    }
-
-    .stButton > button:hover {
-        background: #14B8A6;
-        color: white;
-        border: none;
-    }
-
-    [data-testid="stDownloadButton"] button {
-        background: #172438;
-        color: #5EEAD4;
-        border: 1px solid #0D9488;
-        border-radius: 9px;
-    }
-
-    div[data-baseweb="input"] input,
-    div[data-baseweb="select"] > div {
-        background: #172438;
-        color: white;
-    }
-
-    [data-testid="stExpander"] {
-        background: #111D30;
-        border: 1px solid #293B54;
-        border-radius: 12px;
-    }
-
-    hr {
-        border-color: #293B54;
-    }
-
-    .hero {
-        background: linear-gradient(115deg, #14243A, #0F766E);
-        padding: 30px;
-        border-radius: 17px;
-        border: 1px solid #285B66;
-        margin-bottom: 22px;
-    }
-
-    .hero-title {
-        color: white;
-        font-size: 35px;
-        font-weight: 800;
-        margin-bottom: 3px;
-    }
-
-    .hero-subtitle {
-        color: #99F6E4;
-        font-size: 15px;
-        letter-spacing: 1px;
-    }
-
-    .insight-card {
-        background: #172438;
-        border: 1px solid #293B54;
-        padding: 17px;
-        border-radius: 12px;
-        min-height: 110px;
-    }
-
-    .small-muted {
-        color: #94A3B8;
-        font-size: 12px;
-    }
+.stApp {
+    background: #0B1730;
+    color: #F3F6FC;
+}
+[data-testid="stHeader"] {
+    background: #0B1730;
+}
+[data-testid="stSidebar"] {
+    background: #102344;
+    border-right: 1px solid #263E65;
+}
+[data-testid="stSidebar"] * {
+    color: #EAF1FC;
+}
+h1, h2, h3, h4 {
+    color: #F4F7FD !important;
+}
+p, label, .stMarkdown {
+    color: #D3DEEF;
+}
+[data-testid="stMetric"] {
+    background: #142B50;
+    border: 1px solid #29456F;
+    padding: 18px;
+    border-radius: 12px;
+}
+[data-testid="stMetricLabel"] {
+    color: #AFC4E3 !important;
+}
+[data-testid="stMetricValue"] {
+    color: #FFFFFF !important;
+}
+div.stButton > button {
+    background: #2474D2;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+}
+div.stButton > button:hover {
+    background: #3689EB;
+    color: white;
+}
+div[data-baseweb="select"] > div,
+div[data-baseweb="input"] > div {
+    background: #142B50;
+    border-color: #34537E;
+}
+.stTextArea textarea, .stTextInput input {
+    background: #142B50;
+    color: white;
+}
+hr {
+    border-color: #29456F;
+}
+div[data-testid="stTabs"] button {
+    color: #C9D8ED;
+}
+div[data-testid="stTabs"] button[aria-selected="true"] {
+    color: #69B2FF;
+}
+[data-testid="stDataFrame"] {
+    border: 1px solid #29456F;
+    border-radius: 10px;
+}
+.small-note {
+    color: #AFC4E3;
+    font-size: 13px;
+}
+.section-card {
+    background: #142B50;
+    border: 1px solid #29456F;
+    border-radius: 12px;
+    padding: 18px;
+}
 </style>
 """, unsafe_allow_html=True)
 
-
-# ==================================================
-# 3. CONSTANTS AND DATA
-# ==================================================
-
-DATA_URL = (
-    "https://archive.ics.uci.edu/ml/"
-    "machine-learning-databases/00350/"
-    "default%20of%20credit%20card%20clients.xls"
-)
-
-TARGET = "default payment next month"
-
-PAYMENT_COLUMNS = [
-    "PAY_0", "PAY_2", "PAY_3",
-    "PAY_4", "PAY_5", "PAY_6"
-]
-
-PAYMENT_LABELS = {
-    -2: "No consumption",
-    -1: "Paid duly",
-     0: "Revolving credit",
-     1: "1 month delay",
-     2: "2 months delay",
-     3: "3 months delay",
-     4: "4 months delay",
-     5: "5 months delay",
-     6: "6 months delay",
-     7: "7 months delay",
-     8: "8 months delay",
-     9: "9+ months delay"
-}
-
+# --------------------------------------------------
+# DATA LOADING
+# --------------------------------------------------
 
 @st.cache_data
 def load_data():
-    data = pd.read_excel(DATA_URL, header=1)
+    url = (
+        "https://archive.ics.uci.edu/ml/"
+        "machine-learning-databases/00350/"
+        "default%20of%20credit%20card%20clients.xls"
+    )
+    data = pd.read_excel(url, header=1)
     data.columns = data.columns.astype(str).str.strip()
-
-    required = [
-        TARGET, "LIMIT_BAL", "AGE", "SEX",
-        "EDUCATION", "MARRIAGE", "PAY_0"
-    ]
-
-    missing = [c for c in required if c not in data.columns]
-
-    if missing:
-        raise ValueError(f"Missing expected columns: {missing}")
-
     return data
-
-
-def add_segments(data):
-    data = data.copy()
-
-    bins = [0, 50000, 100000, 200000, 500000, float("inf")]
-
-    labels = [
-        "Under 50K",
-        "50K–99K",
-        "100K–199K",
-        "200K–499K",
-        "500K and above"
-    ]
-
-    data["Credit Limit Segment"] = pd.cut(
-        data["LIMIT_BAL"],
-        bins=bins,
-        labels=labels,
-        right=False
-    )
-
-    data["Repayment Description"] = (
-        data["PAY_0"].map(PAYMENT_LABELS).fillna("Other")
-    )
-
-    return data
-
-
-def default_rate(data):
-    if len(data) == 0:
-        return 0.0
-
-    return float(data[TARGET].mean() * 100)
-
-
-def aggregate_analysis(data, column):
-    result = (
-        data.groupby(column, observed=False)
-        .agg(
-            customers=(TARGET, "count"),
-            defaults=(TARGET, "sum")
-        )
-        .reset_index()
-    )
-
-    result["default_rate"] = (
-        result["defaults"] / result["customers"] * 100
-    )
-
-    return result
-
-
-def plot_layout(fig, height=390):
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#080F1D",
-        plot_bgcolor="#111D30",
-        font=dict(color="#E2E8F0"),
-        height=height,
-        margin=dict(l=20, r=20, t=55, b=20),
-        legend_title_text=""
-    )
-    return fig
-
-
-def create_pdf(data, rate, defaults, average_limit):
-    from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-    )
-    from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.lib.units import mm
-
-    output = BytesIO()
-
-    doc = SimpleDocTemplate(
-        output,
-        pagesize=A4,
-        rightMargin=18 * mm,
-        leftMargin=18 * mm,
-        topMargin=18 * mm,
-        bottomMargin=18 * mm
-    )
-
-    styles = getSampleStyleSheet()
-    story = []
-
-    story.append(Paragraph(
-        "CREDINTEL 2.0 — CREDIT RISK REPORT",
-        styles["Title"]
-    ))
-
-    story.append(Spacer(1, 8))
-
-    story.append(Paragraph(
-        f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-        styles["Normal"]
-    ))
-
-    story.append(Spacer(1, 15))
-
-    table_data = [
-        ["Metric", "Value"],
-        ["Filtered customers", f"{len(data):,}"],
-        ["Observed defaults", f"{defaults:,}"],
-        ["Observed default rate", f"{rate:.2f}%"],
-        ["Average credit limit", f"{average_limit:,.2f}"]
-    ]
-
-    table = Table(table_data, colWidths=[90 * mm, 65 * mm])
-
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#123B46")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#EDF4F5")),
-        ("TEXTCOLOR", (0, 1), (-1, -1), colors.HexColor("#152536")),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("PADDING", (0, 0), (-1, -1), 9)
-    ]))
-
-    story.append(table)
-    story.append(Spacer(1, 18))
-
-    story.append(Paragraph(
-        "Responsible use and limitations",
-        styles["Heading2"]
-    ))
-
-    story.append(Paragraph(
-        "This report summarizes historical observations from the "
-        "UCI Default of Credit Card Clients dataset. Historical "
-        "associations do not establish causation or guarantee "
-        "future outcomes. This report is not an individual lending "
-        "recommendation or credit approval decision.",
-        styles["BodyText"]
-    ))
-
-    doc.build(story)
-    output.seek(0)
-
-    return output.getvalue()
-
-
-# ==================================================
-# 4. HEADER
-# ==================================================
-
-st.markdown("""
-<div class="hero">
-    <div class="hero-title">🛡️ CREDINTEL 2.0</div>
-    <div class="hero-subtitle">PREMIUM CREDIT RISK INTELLIGENCE</div>
-    <p style="color:#E2E8F0; margin-top:16px;">
-        Turn financial data into intelligence.
-        Explore portfolio risk, discover patterns,
-        and work with your AI analyst.
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-
-# ==================================================
-# 5. LOAD APPLICATION
-# ==================================================
 
 try:
-    original_df = load_data()
-    df = add_segments(original_df)
+    df = load_data()
+except Exception as e:
+    st.error(f"Could not load the credit dataset: {e}")
+    st.stop()
 
-    # --------------------------------------------------
-    # SIDEBAR
-    # --------------------------------------------------
+TARGET = "default payment next month"
 
-    st.sidebar.markdown("# 🛡️ CREDINTEL")
-    st.sidebar.caption("RISK INTELLIGENCE PLATFORM")
-    st.sidebar.divider()
+if TARGET not in df.columns:
+    st.error("The expected target column was not found in the dataset.")
+    st.stop()
 
-    st.sidebar.subheader("🎛️ Portfolio Filters")
+# --------------------------------------------------
+# DATABASE
+# --------------------------------------------------
 
-    st.sidebar.caption("Credit limit")
+@st.cache_resource
+def create_database():
+    database = sqlite3.connect(":memory:", check_same_thread=False)
+    df.to_sql("credit_clients", database, if_exists="replace", index=False)
+    database.execute("PRAGMA query_only = ON")
+    return database
 
-    min_limit = int(df["LIMIT_BAL"].min())
-    max_limit = int(df["LIMIT_BAL"].max())
+conn = create_database()
 
-    limit_range = st.sidebar.slider(
-        "Credit limit range",
-        min_value=min_limit,
-        max_value=max_limit,
-        value=(min_limit, max_limit),
-        step=10000
+# --------------------------------------------------
+# HELPERS
+# --------------------------------------------------
+
+def format_money(value):
+    return f"${value:,.0f}"
+
+def make_chart(fig, height=380):
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#142B50",
+        plot_bgcolor="#142B50",
+        font=dict(color="#EAF1FC"),
+        height=height,
+        margin=dict(l=30, r=25, t=45, b=35),
+        legend=dict(font=dict(color="#D3DEEF"))
     )
+    fig.update_xaxes(gridcolor="#29456F", zerolinecolor="#29456F")
+    fig.update_yaxes(gridcolor="#29456F", zerolinecolor="#29456F")
+    st.plotly_chart(fig, use_container_width=True)
 
-    age_range = st.sidebar.slider(
-        "Customer age",
-        min_value=int(df["AGE"].min()),
-        max_value=int(df["AGE"].max()),
-        value=(int(df["AGE"].min()), int(df["AGE"].max()))
-    )
+def calculate_default_rate(data):
+    if len(data) == 0:
+        return 0
+    return data[TARGET].mean() * 100
 
-    sex_options = sorted(df["SEX"].dropna().unique().tolist())
+def get_ai_answer(question, context):
+    try:
+        from google import genai
 
-    selected_sex = st.sidebar.multiselect(
-        "Gender",
-        options=sex_options,
-        default=sex_options,
-        format_func=lambda x: {
-            1: "Male",
-            2: "Female"
-        }.get(x, str(x))
-    )
+        api_key = st.secrets.get("GEMINI_API_KEY")
+        if not api_key:
+            return "Gemini API key not found. Add GEMINI_API_KEY in Streamlit Secrets."
 
-    education_options = sorted(
-        df["EDUCATION"].dropna().unique().tolist()
-    )
+        client = genai.Client(api_key=api_key)
 
-    selected_education = st.sidebar.multiselect(
-        "Education category",
-        options=education_options,
-        default=education_options
-    )
+        prompt = f"""
+You are CredIntel, a professional banking credit-risk analyst.
 
-    marriage_options = sorted(
-        df["MARRIAGE"].dropna().unique().tolist()
-    )
+Use only the supplied dataset context to support factual conclusions.
+Explain insights clearly for banking management.
+Do not invent statistics or claim that correlations prove causation.
+Do not make individual lending decisions.
 
-    selected_marriage = st.sidebar.multiselect(
-        "Marital status category",
-        options=marriage_options,
-        default=marriage_options
-    )
-
-    repayment_options = sorted(
-        df["PAY_0"].dropna().unique().tolist()
-    )
-
-    selected_repayment = st.sidebar.multiselect(
-        "Most recent repayment status",
-        options=repayment_options,
-        default=repayment_options,
-        format_func=lambda x: PAYMENT_LABELS.get(x, str(x))
-    )
-
-    st.sidebar.divider()
-
-    if st.sidebar.button("↻ Reset all filters", use_container_width=True):
-        st.rerun()
-
-    st.sidebar.caption(
-        "Dataset: UCI Default of Credit Card Clients"
-    )
-
-    # --------------------------------------------------
-    # FILTER DATA
-    # --------------------------------------------------
-
-    filtered = df[
-        df["LIMIT_BAL"].between(limit_range[0], limit_range[1])
-        & df["AGE"].between(age_range[0], age_range[1])
-        & df["SEX"].isin(selected_sex)
-        & df["EDUCATION"].isin(selected_education)
-        & df["MARRIAGE"].isin(selected_marriage)
-        & df["PAY_0"].isin(selected_repayment)
-    ].copy()
-
-    n = len(filtered)
-    defaults = int(filtered[TARGET].sum()) if n else 0
-    rate = default_rate(filtered)
-
-    avg_limit = (
-        float(filtered["LIMIT_BAL"].mean()) if n else 0
-    )
-
-    # --------------------------------------------------
-    # NAVIGATION
-    # --------------------------------------------------
-
-    page = st.radio(
-        "Navigation",
-        [
-            "Executive Overview",
-            "Risk Analytics",
-            "AI Analyst",
-            "SQL Explorer",
-            "Report Center"
-        ],
-        horizontal=True,
-        label_visibility="collapsed"
-    )
-
-    st.divider()
-
-    # ==================================================
-    # PAGE 1: EXECUTIVE OVERVIEW
-    # ==================================================
-
-    if page == "Executive Overview":
-
-        st.title("Executive Overview")
-        st.caption(
-            "A high-level view of your selected portfolio."
-        )
-
-        k1, k2, k3, k4 = st.columns(4)
-
-        k1.metric("Customers", f"{n:,}")
-        k2.metric("Observed Defaults", f"{defaults:,}")
-        k3.metric("Default Rate", f"{rate:.2f}%")
-        k4.metric("Average Credit Limit", f"{avg_limit:,.0f}")
-
-        st.divider()
-
-        left, right = st.columns(2)
-
-        if n:
-            repayment = aggregate_analysis(filtered, "PAY_0")
-            repayment["Status"] = repayment["PAY_0"].map(
-                PAYMENT_LABELS
-            ).fillna(repayment["PAY_0"].astype(str))
-
-            with left:
-                st.subheader("Repayment Risk")
-
-                fig = px.bar(
-                    repayment,
-                    x="Status",
-                    y="default_rate",
-                    color="default_rate",
-                    color_continuous_scale=["#0D9488", "#5EEAD4"],
-                    hover_data=["customers", "defaults"],
-                    labels={
-                        "Status": "Repayment status",
-                        "default_rate": "Default rate (%)"
-                    }
-                )
-
-                fig.update_layout(coloraxis_showscale=False)
-                st.plotly_chart(
-                    plot_layout(fig),
-                    use_container_width=True
-                )
-
-            credit = aggregate_analysis(
-                filtered, "Credit Limit Segment"
-            )
-
-            credit = credit[credit["customers"] > 0]
-
-            with right:
-                st.subheader("Credit Limit Risk")
-
-                fig2 = px.bar(
-                    credit,
-                    x="Credit Limit Segment",
-                    y="default_rate",
-                    color="default_rate",
-                    color_continuous_scale=["#0D9488", "#5EEAD4"],
-                    hover_data=["customers", "defaults"]
-                )
-
-                fig2.update_layout(coloraxis_showscale=False)
-
-                st.plotly_chart(
-                    plot_layout(fig2),
-                    use_container_width=True
-                )
-
-            st.subheader("Portfolio Distribution")
-
-            donut_data = pd.DataFrame({
-                "Outcome": ["No observed default", "Observed default"],
-                "Customers": [n - defaults, defaults]
-            })
-
-            donut = px.pie(
-                donut_data,
-                names="Outcome",
-                values="Customers",
-                hole=0.68,
-                color_discrete_sequence=["#0D9488", "#F59E0B"]
-            )
-
-            donut.update_traces(
-                textposition="inside",
-                textinfo="percent+label"
-            )
-
-            st.plotly_chart(
-                plot_layout(donut, 350),
-                use_container_width=True
-            )
-
-        else:
-            st.warning("No records match your selected filters.")
-
-    # ==================================================
-    # PAGE 2: RISK ANALYTICS
-    # ==================================================
-
-    elif page == "Risk Analytics":
-
-        st.title("Advanced Risk Analytics")
-        st.caption(
-            "Explore customer segments and repayment patterns."
-        )
-
-        if n == 0:
-            st.warning("No data available for the selected filters.")
-
-        else:
-            tab1, tab2, tab3 = st.tabs([
-                "Repayment Analysis",
-                "Customer Segments",
-                "Correlation"
-            ])
-
-            with tab1:
-                st.subheader("Repayment Status Analysis")
-
-                payment_data = filtered[PAYMENT_COLUMNS].copy()
-                payment_data[TARGET] = filtered[TARGET].values
-
-                long_payment = payment_data.melt(
-                    id_vars=[TARGET],
-                    value_vars=PAYMENT_COLUMNS,
-                    var_name="Month",
-                    value_name="Repayment Status"
-                )
-
-                heat_data = (
-                    long_payment.groupby(
-                        ["Month", "Repayment Status"]
-                    )[TARGET]
-                    .mean()
-                    .reset_index()
-                )
-
-                heat_data["Default Rate (%)"] = (
-                    heat_data[TARGET] * 100
-                )
-
-                heat = px.density_heatmap(
-                    heat_data,
-                    x="Month",
-                    y="Repayment Status",
-                    z="Default Rate (%)",
-                    histfunc="avg",
-                    color_continuous_scale="Teal"
-                )
-
-                st.plotly_chart(
-                    plot_layout(heat, 440),
-                    use_container_width=True
-                )
-
-                st.caption(
-                    "Historical default rate by repayment status "
-                    "across the recorded months."
-                )
-
-            with tab2:
-                st.subheader("Customer Segment Comparison")
-
-                segment_choice = st.selectbox(
-                    "Choose a segment",
-                    ["AGE", "SEX", "EDUCATION", "MARRIAGE",
-                     "Credit Limit Segment"]
-                )
-
-                segment_data = aggregate_analysis(
-                    filtered, segment_choice
-                )
-
-                segment_data[segment_choice] = (
-                    segment_data[segment_choice].astype(str)
-                )
-
-                fig = px.bar(
-                    segment_data,
-                    x=segment_choice,
-                    y="default_rate",
-                    color="default_rate",
-                    hover_data=["customers", "defaults"],
-                    color_continuous_scale=["#0D9488", "#5EEAD4"]
-                )
-
-                fig.update_layout(coloraxis_showscale=False)
-
-                st.plotly_chart(
-                    plot_layout(fig),
-                    use_container_width=True
-                )
-
-                st.dataframe(
-                    segment_data,
-                    use_container_width=True,
-                    hide_index=True
-                )
-
-            with tab3:
-                st.subheader("Feature Correlation")
-
-                numeric = filtered.select_dtypes(
-                    include="number"
-                ).copy()
-
-                corr = numeric.corr()
-
-                fig = px.imshow(
-                    corr,
-                    color_continuous_scale="RdBu_r",
-                    zmin=-1,
-                    zmax=1,
-                    aspect="auto"
-                )
-
-                st.plotly_chart(
-                    plot_layout(fig, 650),
-                    use_container_width=True
-                )
-
-                st.caption(
-                    "Correlation describes association, not causation."
-                )
-
-    # ==================================================
-    # PAGE 3: AI ANALYST
-    # ==================================================
-
-    elif page == "AI Analyst":
-
-        st.title("🤖 CredIntel AI Analyst")
-        st.caption(
-            "Ask questions about your currently filtered portfolio."
-        )
-
-        if n == 0:
-            st.warning("No filtered records are available.")
-
-        else:
-            repayment = aggregate_analysis(filtered, "PAY_0")
-
-            credit = aggregate_analysis(
-                filtered, "Credit Limit Segment"
-            )
-
-            context = f"""
-PORTFOLIO SUMMARY
-Customers: {n}
-Observed defaults: {defaults}
-Observed default rate: {rate:.2f}%
-Average credit limit: {avg_limit:.2f}
-
-REPAYMENT ANALYSIS:
-{repayment.round(2).to_string(index=False)}
-
-CREDIT LIMIT ANALYSIS:
-{credit.round(2).to_string(index=False)}
-"""
-
-            if "credintel_chat" not in st.session_state:
-                st.session_state.credintel_chat = []
-
-            for message in st.session_state.credintel_chat:
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
-
-            question = st.chat_input(
-                "Ask about default patterns, repayment risk..."
-            )
-
-            if question:
-
-                st.session_state.credintel_chat.append({
-                    "role": "user",
-                    "content": question
-                })
-
-                with st.chat_message("user"):
-                    st.markdown(question)
-
-                try:
-                    api_key = st.secrets["GEMINI_API_KEY"]
-                    client = genai.Client(api_key=api_key)
-
-                    prompt = f"""
-You are CredIntel AI, a professional and responsible
-banking analytics assistant.
-
-Use only the aggregate portfolio information below.
-
+DATA CONTEXT:
 {context}
 
 USER QUESTION:
 {question}
+"""
+        response = client.models.generate_content(
+            model="gemini-3.5-flash",
+            contents=prompt
+        )
+        return response.text
 
-Answer professionally and clearly.
-Explain business implications.
-Do not claim causation from correlation.
-Do not make individual lending decisions.
-Do not invent statistics.
-Mention limitations where relevant.
+    except Exception as e:
+        return f"AI request failed: {str(e)}"
+
+# --------------------------------------------------
+# SIDEBAR
+# --------------------------------------------------
+
+with st.sidebar:
+    st.markdown("## 🏦 CREDINTEL")
+    st.caption("CREDIT RISK INTELLIGENCE")
+    st.divider()
+
+    page = st.radio(
+        "NAVIGATION",
+        [
+            "Executive Overview",
+            "Credit Risk Analytics",
+            "AI Intelligence",
+            "SQL Explorer",
+            "Research & Reports"
+        ]
+    )
+
+    st.divider()
+    st.markdown("### DATA SOURCE")
+    st.caption("UCI Default of Credit Card Clients")
+    st.caption(f"{len(df):,} historical customer records")
+
+    st.divider()
+    st.markdown("### PROJECT STATUS")
+    st.success("Dataset loaded")
+    st.success("SQL database ready")
+
+# --------------------------------------------------
+# FILTERS
+# --------------------------------------------------
+
+st.sidebar.markdown("### PORTFOLIO FILTERS")
+
+filtered = df.copy()
+
+min_limit = int(df["LIMIT_BAL"].min())
+max_limit = int(df["LIMIT_BAL"].max())
+
+limit_range = st.sidebar.slider(
+    "Credit limit",
+    min_limit,
+    max_limit,
+    (min_limit, max_limit),
+    step=10000
+)
+
+filtered = filtered[
+    filtered["LIMIT_BAL"].between(limit_range[0], limit_range[1])
+]
+
+age_min = int(df["AGE"].min())
+age_max = int(df["AGE"].max())
+
+age_range = st.sidebar.slider(
+    "Customer age",
+    age_min,
+    age_max,
+    (age_min, age_max)
+)
+
+filtered = filtered[
+    filtered["AGE"].between(age_range[0], age_range[1])
+]
+
+gender_options = sorted(df["SEX"].dropna().unique().tolist())
+gender_selected = st.sidebar.multiselect(
+    "Gender",
+    gender_options,
+    default=gender_options
+)
+filtered = filtered[filtered["SEX"].isin(gender_selected)]
+
+education_options = sorted(df["EDUCATION"].dropna().unique().tolist())
+education_selected = st.sidebar.multiselect(
+    "Education",
+    education_options,
+    default=education_options
+)
+filtered = filtered[filtered["EDUCATION"].isin(education_selected)]
+
+marriage_options = sorted(df["MARRIAGE"].dropna().unique().tolist())
+marriage_selected = st.sidebar.multiselect(
+    "Marital status",
+    marriage_options,
+    default=marriage_options
+)
+filtered = filtered[filtered["MARRIAGE"].isin(marriage_selected)]
+
+st.sidebar.caption(f"Filtered records: {len(filtered):,}")
+
+# --------------------------------------------------
+# COMMON HEADER
+# --------------------------------------------------
+
+st.markdown("# CREDINTEL")
+st.markdown("### Credit Risk Intelligence Platform")
+st.caption(
+    "Portfolio monitoring  |  Risk analytics  |  AI-powered insights"
+)
+st.divider()
+
+# --------------------------------------------------
+# EXECUTIVE OVERVIEW
+# --------------------------------------------------
+
+if page == "Executive Overview":
+
+    st.subheader("Executive Overview")
+    st.caption("A consolidated view of the selected credit portfolio.")
+
+    total = len(filtered)
+    defaults = int(filtered[TARGET].sum()) if total else 0
+    default_rate = calculate_default_rate(filtered)
+    avg_limit = filtered["LIMIT_BAL"].mean() if total else 0
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("CUSTOMERS", f"{total:,}")
+    c2.metric("DEFAULTED CUSTOMERS", f"{defaults:,}")
+    c3.metric("DEFAULT RATE", f"{default_rate:.2f}%")
+    c4.metric("AVERAGE CREDIT LIMIT", format_money(avg_limit))
+
+    st.divider()
+
+    left, right = st.columns(2)
+
+    with left:
+        st.markdown("#### Default distribution")
+        if total:
+            distribution = (
+                filtered[TARGET]
+                .value_counts()
+                .rename(index={0: "No default", 1: "Default"})
+                .reset_index()
+            )
+            distribution.columns = ["Status", "Customers"]
+
+            fig = px.pie(
+                distribution,
+                names="Status",
+                values="Customers",
+                hole=0.65,
+                color="Status",
+                color_discrete_map={
+                    "No default": "#3689EB",
+                    "Default": "#F0A34A"
+                }
+            )
+            make_chart(fig)
+
+    with right:
+        st.markdown("#### Default rate by repayment status")
+        if total:
+            repayment = (
+                filtered.groupby("PAY_0")[TARGET]
+                .mean()
+                .mul(100)
+                .reset_index()
+            )
+            repayment.columns = ["Repayment status", "Default rate"]
+
+            fig = px.bar(
+                repayment,
+                x="Repayment status",
+                y="Default rate",
+                color="Default rate",
+                color_continuous_scale="Blues"
+            )
+            make_chart(fig)
+
+    st.markdown("#### Portfolio snapshot")
+
+    if total:
+        summary = pd.DataFrame({
+            "Metric": [
+                "Total customers",
+                "Defaulted customers",
+                "Observed default rate",
+                "Average credit limit",
+                "Average customer age"
+            ],
+            "Value": [
+                f"{total:,}",
+                f"{defaults:,}",
+                f"{default_rate:.2f}%",
+                format_money(avg_limit),
+                f"{filtered['AGE'].mean():.1f} years"
+            ]
+        })
+        st.dataframe(summary, use_container_width=True, hide_index=True)
+    else:
+        st.warning("No customers match the selected filters.")
+
+# --------------------------------------------------
+# CREDIT RISK ANALYTICS
+# --------------------------------------------------
+
+elif page == "Credit Risk Analytics":
+
+    st.subheader("Credit Risk Analytics")
+    st.caption("Explore repayment behavior, customer groups and portfolio patterns.")
+
+    tab1, tab2, tab3 = st.tabs([
+        "Repayment Behavior",
+        "Customer Segments",
+        "Correlation Analysis"
+    ])
+
+    with tab1:
+        st.markdown("#### Default rate by repayment status")
+
+        repayment = (
+            filtered.groupby("PAY_0")
+            .agg(
+                Customers=(TARGET, "count"),
+                Defaults=(TARGET, "sum"),
+                Default_Rate=(TARGET, "mean")
+            )
+            .reset_index()
+        )
+        repayment["Default_Rate"] *= 100
+
+        fig = px.bar(
+            repayment,
+            x="PAY_0",
+            y="Default_Rate",
+            color="Default_Rate",
+            color_continuous_scale="Blues",
+            hover_data=["Customers", "Defaults"]
+        )
+        make_chart(fig)
+
+        st.dataframe(repayment, use_container_width=True, hide_index=True)
+
+    with tab2:
+        st.markdown("#### Default rate by credit limit segment")
+
+        bins = [0, 50000, 100000, 200000, 500000, float("inf")]
+        labels = [
+            "Under 50K",
+            "50K–99K",
+            "100K–199K",
+            "200K–499K",
+            "500K and above"
+        ]
+
+        segment_data = filtered.copy()
+        segment_data["Credit Segment"] = pd.cut(
+            segment_data["LIMIT_BAL"],
+            bins=bins,
+            labels=labels,
+            right=False
+        )
+
+        segment = (
+            segment_data.groupby("Credit Segment", observed=False)
+            .agg(
+                Customers=(TARGET, "count"),
+                Defaults=(TARGET, "sum"),
+                Default_Rate=(TARGET, "mean")
+            )
+            .reset_index()
+        )
+        segment["Default_Rate"] *= 100
+
+        fig = px.bar(
+            segment,
+            x="Credit Segment",
+            y="Default_Rate",
+            color="Default_Rate",
+            color_continuous_scale="Blues"
+        )
+        make_chart(fig)
+
+        st.dataframe(segment, use_container_width=True, hide_index=True)
+
+    with tab3:
+        st.markdown("#### Selected variable correlations")
+
+        numeric = filtered.select_dtypes(include="number")
+        correlation = numeric.corr()
+
+        fig = px.imshow(
+            correlation,
+            text_auto=".2f",
+            color_continuous_scale="RdBu_r",
+            aspect="auto"
+        )
+        make_chart(fig, height=600)
+
+        st.caption(
+            "Correlation indicates statistical association, not causation."
+        )
+
+# --------------------------------------------------
+# AI INTELLIGENCE
+# --------------------------------------------------
+
+elif page == "AI Intelligence":
+
+    st.subheader("CredIntel AI Intelligence")
+    st.caption("Ask questions about portfolio performance and credit risk.")
+
+    total = len(filtered)
+    defaults = int(filtered[TARGET].sum()) if total else 0
+    rate = calculate_default_rate(filtered)
+
+    context = f"""
+Number of customers: {total}
+Number of defaults: {defaults}
+Observed default rate: {rate:.2f}%
+Average credit limit: {filtered['LIMIT_BAL'].mean() if total else 0:.2f}
+Average age: {filtered['AGE'].mean() if total else 0:.2f}
 """
 
-                    with st.chat_message("assistant"):
-                        with st.spinner("Analyzing portfolio..."):
-                            response = client.models.generate_content(
-                                model="gemini-3.5-flash",
-                                contents=prompt
-                            )
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.markdown("**AI Analyst**")
+    st.write("Ask a question about the currently filtered portfolio.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-                        answer = response.text or (
-                            "The AI returned an empty response."
-                        )
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
 
-                        st.markdown(answer)
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-                    st.session_state.credintel_chat.append({
-                        "role": "assistant",
-                        "content": answer
-                    })
+    question = st.chat_input("Ask CredIntel about credit risk...")
 
-                except Exception as e:
-                    st.error(f"AI request failed: {e}")
+    if question:
+        st.session_state.chat_history.append({
+            "role": "user",
+            "content": question
+        })
 
-            if st.button("Clear conversation"):
-                st.session_state.credintel_chat = []
-                st.rerun()
+        with st.chat_message("user"):
+            st.markdown(question)
 
-    # ==================================================
-    # PAGE 4: SAFE SQL EXPLORER
-    # ==================================================
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing portfolio data..."):
+                answer = get_ai_answer(question, context)
+                st.markdown(answer)
 
-    elif page == "SQL Explorer":
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": answer
+        })
 
-        st.title("🗄️ SQL Explorer")
-        st.caption(
-            "Explore the dataset using read-only SELECT queries."
-        )
+    if st.button("Clear conversation"):
+        st.session_state.chat_history = []
+        st.rerun()
 
-        conn = sqlite3.connect(":memory:")
-        filtered.to_sql(
-            "credit_clients",
-            conn,
-            index=False,
-            if_exists="replace"
-        )
+# --------------------------------------------------
+# SQL EXPLORER
+# --------------------------------------------------
 
-        conn.execute("PRAGMA query_only = ON")
+elif page == "SQL Explorer":
 
-        example = """SELECT
+    st.subheader("SQL Explorer")
+    st.caption("Run read-only SQL queries against the credit_clients table.")
+
+    example_query = """SELECT
     PAY_0,
     COUNT(*) AS customers,
     SUM("default payment next month") AS defaults,
@@ -850,154 +573,163 @@ Mention limitations where relevant.
     ) AS default_rate
 FROM credit_clients
 GROUP BY PAY_0
-ORDER BY default_rate DESC;"""
+ORDER BY default_rate DESC"""
 
-        query = st.text_area(
-            "SQL query",
-            value=example,
-            height=220
-        )
+    query = st.text_area(
+        "SQL Query",
+        value=example_query,
+        height=220
+    )
 
-        st.caption(
-            "Only one read-only SELECT query is allowed. "
-            "Queries run against the currently filtered data."
-        )
+    if st.button("▶ Execute SQL", use_container_width=True):
 
-        if st.button("▶ Run SQL query"):
+        cleaned = query.strip().rstrip(";").strip()
+        first_word = cleaned.split(maxsplit=1)[0].upper() if cleaned else ""
 
-            cleaned = query.strip().rstrip(";").strip()
-            first_word = cleaned.split(maxsplit=1)[0].upper() if cleaned else ""
-
-            if first_word != "SELECT":
-                st.error("Only SELECT queries are permitted.")
-            elif ";" in cleaned:
-                st.error("Multiple SQL statements are not permitted.")
-            else:
-                try:
-                    result = pd.read_sql_query(cleaned, conn)
-                    st.success("Query executed successfully!")
-                    st.dataframe(result, use_container_width=True)
-                except Exception as e:
-                    st.error(f"SQL error: {e}")
-            if not cleaned.lower().startswith("select "):
-                st.error("Only SELECT queries are permitted.")
-
-            elif ";" in cleaned:
-                st.error("Multiple SQL statements are not permitted.")
-
-            else:
-                try:
-                    result = pd.read_sql_query(cleaned, conn)
-
-                    st.success(
-                        f"Query completed: {len(result):,} rows returned."
-                    )
-
-                    st.dataframe(
-                        result,
-                        use_container_width=True,
-                        hide_index=True
-                    )
-
-                    st.download_button(
-                        "Download SQL results",
-                        result.to_csv(index=False).encode("utf-8"),
-                        "credintel_sql_results.csv",
-                        "text/csv"
-                    )
-
-                except Exception as e:
-                    st.error(f"SQL error: {e}")
-
-        conn.close()
-
-    # ==================================================
-    # PAGE 5: REPORT CENTER
-    # ==================================================
-
-    elif page == "Report Center":
-
-        st.title("📑 Report Center")
-        st.caption(
-            "Export the currently filtered portfolio analysis."
-        )
-
-        st.subheader("Report Summary")
-
-        r1, r2, r3 = st.columns(3)
-
-        r1.metric("Customers", f"{n:,}")
-        r2.metric("Defaults", f"{defaults:,}")
-        r3.metric("Default Rate", f"{rate:.2f}%")
-
-        if n:
-
-            st.subheader("Filtered Data Preview")
-
-            st.dataframe(
-                filtered.head(100),
-                use_container_width=True
-            )
-
-            st.download_button(
-                "⬇ Download filtered data (CSV)",
-                filtered.to_csv(index=False).encode("utf-8"),
-                "credintel_portfolio.csv",
-                "text/csv",
-                use_container_width=True
-            )
-
-            try:
-                pdf = create_pdf(
-                    filtered, rate, defaults, avg_limit
-                )
-
-                st.download_button(
-                    "⬇ Download executive report (PDF)",
-                    pdf,
-                    "credintel_executive_report.pdf",
-                    "application/pdf",
-                    use_container_width=True
-                )
-
-            except ImportError:
-                st.warning(
-                    "PDF dependency missing. Add reportlab "
-                    "to requirements.txt and redeploy."
-                )
-
+        if first_word != "SELECT":
+            st.error("Only SELECT queries are permitted.")
+        elif ";" in cleaned:
+            st.error("Multiple SQL statements are not permitted.")
         else:
-            st.info("No records are available to export.")
+            try:
+                result = pd.read_sql_query(cleaned, conn)
+                st.success("Query executed successfully.")
+                st.dataframe(result, use_container_width=True)
+                st.download_button(
+                    "Download query results",
+                    result.to_csv(index=False),
+                    "credintel_sql_results.csv",
+                    "text/csv"
+                )
+            except Exception as e:
+                st.error(f"SQL error: {e}")
 
-    # ==================================================
-    # FOOTER AND RESPONSIBLE USE
-    # ==================================================
+    st.info(
+        "Available table: credit_clients. "
+        "Database writes are disabled."
+    )
+
+# --------------------------------------------------
+# RESEARCH & REPORTS
+# --------------------------------------------------
+
+elif page == "Research & Reports":
+
+    st.subheader("Research & Reports")
+    st.caption("Export portfolio data and generate a management summary.")
+
+    st.markdown("#### Customer data export")
+
+    st.download_button(
+        "Download filtered data (CSV)",
+        filtered.to_csv(index=False),
+        "credintel_filtered_customers.csv",
+        "text/csv",
+        use_container_width=True
+    )
 
     st.divider()
 
-    with st.expander("About CredIntel and Responsible Use"):
+    st.markdown("#### Executive PDF report")
 
-        st.markdown("""
-**Dataset:** UCI Default of Credit Card Clients.
+    if st.button("Generate PDF Report", use_container_width=True):
 
-**Purpose:** Educational credit risk analytics and portfolio exploration.
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.platypus import (
+                SimpleDocTemplate,
+                Paragraph,
+                Spacer,
+                Table,
+                TableStyle
+            )
+            from reportlab.lib import colors
+            from reportlab.lib.styles import getSampleStyleSheet
 
-**Dataset limitations:**
-- Historical Taiwan credit card data.
-- Historical patterns do not guarantee future outcomes.
-- Correlation does not establish causation.
-- The data may not represent other countries or current customers.
+            buffer = BytesIO()
+            document = SimpleDocTemplate(buffer, pagesize=A4)
+            styles = getSampleStyleSheet()
 
-**Responsible AI:**
-- AI explanations are informational, not financial advice.
-- This application is not an individual credit scoring system.
-- Never use this dashboard as the sole basis for lending decisions.
-""")
+            total = len(filtered)
+            defaults = int(filtered[TARGET].sum()) if total else 0
+            rate = calculate_default_rate(filtered)
 
-    st.caption(
-        "CREDINTEL 2.0 | Python · SQL · Streamlit · Plotly · Gemini AI"
-    )
+            story = [
+                Paragraph("CredIntel Credit Risk Report", styles["Title"]),
+                Spacer(1, 20),
+                Paragraph("Executive Portfolio Summary", styles["Heading2"]),
+                Spacer(1, 10)
+            ]
 
-except Exception as e:
-    st.error("CredIntel could not load.")
-    st.exception(e)
+            report_data = [
+                ["Metric", "Value"],
+                ["Customers", f"{total:,}"],
+                ["Defaulted customers", f"{defaults:,}"],
+                ["Observed default rate", f"{rate:.2f}%"],
+                [
+                    "Average credit limit",
+                    format_money(filtered["LIMIT_BAL"].mean() if total else 0)
+                ],
+                [
+                    "Average age",
+                    f"{filtered['AGE'].mean():.1f}" if total else "N/A"
+                ]
+            ]
+
+            table = Table(report_data, colWidths=[250, 180])
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#17365D")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("PADDING", (0, 0), (-1, -1), 9),
+                ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke)
+            ]))
+
+            story.extend([
+                table,
+                Spacer(1, 20),
+                Paragraph("Responsible Use and Limitations", styles["Heading2"]),
+                Paragraph(
+                    "This report analyzes historical credit card data from Taiwan. "
+                    "Observed statistical relationships do not establish causation. "
+                    "This analysis is for educational and research purposes and "
+                    "must not be used as the sole basis for individual lending decisions.",
+                    styles["BodyText"]
+                )
+            ])
+
+            document.build(story)
+            buffer.seek(0)
+
+            st.download_button(
+                "Download PDF Report",
+                buffer.getvalue(),
+                "credintel_executive_report.pdf",
+                "application/pdf",
+                use_container_width=True
+            )
+
+        except Exception as e:
+            st.error(f"Could not generate PDF: {e}")
+
+    st.divider()
+    st.markdown("#### Dataset information")
+    st.write("Source: UCI Machine Learning Repository")
+    st.write("Dataset: Default of Credit Card Clients")
+    st.write("Records: 30,000 historical customers")
+    st.write("Target: Default payment next month")
+
+# --------------------------------------------------
+# FOOTER
+# --------------------------------------------------
+
+st.divider()
+
+st.caption(
+    "CREDINTEL | Credit Risk Intelligence Platform"
+)
+
+st.caption(
+    "Educational and analytical use only. Historical dataset; "
+    "not a lending recommendation or an individual credit decision."
+)
